@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Web Pribadi</title>
+    <!-- Import Supabase JS SDK dari CDN -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        /* Desain Dasar dan Warna Teks Hitam (sesuai spesifikasi) */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #000000; /* Semua teks berwarna hitam mutlak */
+        }
+
+        /* Latar belakang Sky Blue */
+        body {
+            background-color: oklab(96.346% 0.00308 0.00084);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Container form berwarna Putih */
+        .login-container {
+            background-color: #ffffff;
+            padding: 40px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 26px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            border-color: #87CEEB; /* Aksen Sky Blue saat fokus */
+        }
+
+        .form-group input:disabled {
+            background-color: #f5f5f5;
+            cursor: not-allowed;
+        }
+
+        /* Tombol berwarna Sky Blue dengan teks Hitam */
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background-color: #30a6d4;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-login:hover:not(:disabled) {
+            opacity: 0.8;
+        }
+
+        .btn-login:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .message-box {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: bold;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <h2>silahkan raja ku</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="email">Email </label>
+                <input type="email" id="email" placeholder="Masukkan email Anda" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Masukkan password Anda" required>
+            </div>
+            <button type="submit" id="loginBtn" class="btn-login">Login</button>
+        </form>
+        <div id="messageBox" class="message-box"></div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // KONFIGURASI SUPABASE (Masukkan kredensial Anda di sini)
+        // =====================================================================
+        const SUPABASE_URL = 'https://eadgzrfbawpherrecxrr.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_fXdx-Wn6FO3GpgzkwAJOaA_8i78Lk6K';
+        // =====================================================================
+
+        // Inisialisasi Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Elemen DOM
+        const form = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('loginBtn');
+        const messageBox = document.getElementById('messageBox');
+
+        // Pengaturan Lockout
+        const MAX_ATTEMPTS = 3;
+        const LOCKOUT_DURATION = 5 * 60 * 1000; // 5 menit dalam milidetik
+        let countdownInterval;
+
+        // Fungsi menampilkan pesan
+        function showMessage(msg) {
+            messageBox.innerText = msg;
+        }
+
+        // Fungsi mengecek status lockout saat halaman dimuat
+        function checkLockoutStatus() {
+            const lockoutUntil = localStorage.getItem('lockoutUntil');
+            
+            if (lockoutUntil && Date.now() < parseInt(lockoutUntil)) {
+                startLockoutCountdown(parseInt(lockoutUntil));
+                return true;
+            } else if (lockoutUntil && Date.now() >= parseInt(lockoutUntil)) {
+                // Hapus lockout jika waktu sudah lewat
+                localStorage.removeItem('lockoutUntil');
+                localStorage.setItem('loginAttempts', 0);
+            }
+            return false;
+        }
+
+        // Fungsi memulai hitung mundur (countdown)
+        function startLockoutCountdown(endTime) {
+            // Nonaktifkan form
+            emailInput.disabled = true;
+            passwordInput.disabled = true;
+            loginBtn.disabled = true;
+
+            countdownInterval = setInterval(() => {
+                const now = Date.now();
+                const distance = endTime - now;
+
+                if (distance <= 0) {
+                    clearInterval(countdownInterval);
+                    localStorage.removeItem('lockoutUntil');
+                    localStorage.setItem('loginAttempts', 0);
+                    
+                    emailInput.disabled = false;
+                    passwordInput.disabled = false;
+                    loginBtn.disabled = false;
+                    showMessage('');
+                } else {
+                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                    showMessage(`Terlalu banyak percobaan. Coba lagi dalam ${minutes} menit ${seconds} detik.`);
+                }
+            }, 1000);
+        }
+
+        // Jalankan pengecekan lockout saat pertama kali load
+        checkLockoutStatus();
+
+        // Event listener saat form dikirim
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (checkLockoutStatus()) return; // Cegah submit jika sedang dilock
+
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            loginBtn.innerText = 'Memproses...';
+            loginBtn.disabled = true;
+            showMessage('');
+
+            try {
+                // Proses otentikasi ke Supabase
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password,
+                });
+
+                if (error) {
+                    throw error;
+                }
+
+                // Jika Berhasil
+                localStorage.setItem('loginAttempts', 0); // Reset attempt
+                window.location.href = 'dashboard.html'; // Redirect
+
+            } catch (error) {
+                // Jika Gagal
+                let attempts = parseInt(localStorage.getItem('loginAttempts') || 0);
+                attempts += 1;
+                localStorage.setItem('loginAttempts', attempts);
+
+                if (attempts >= MAX_ATTEMPTS) {
+                    const lockoutTime = Date.now() + LOCKOUT_DURATION;
+                    localStorage.setItem('lockoutUntil', lockoutTime);
+                    startLockoutCountdown(lockoutTime);
+                } else {
+                    const sisa = MAX_ATTEMPTS - attempts;
+                    showMessage(`Login gagal. Email atau password salah. (Sisa percobaan: ${sisa})`);
+                    loginBtn.innerText = 'Login';
+                    loginBtn.disabled = false;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
